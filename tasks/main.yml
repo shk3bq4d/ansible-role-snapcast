@@ -6,6 +6,8 @@
 - include: server.yml
   when:
     - snapcast_install_server == true
-- include: client.yml
+- include_tasks: client.yml
   when:
     - snapcast_install_client == true
+  tags:
+    - multi

@@ -12,12 +12,14 @@
     owner: "{{ snapcast_client_user }}"
     group: audio
     mode: 0755
-- name: "Ensure the options to the Snapclient daemon are set"
-  become: true
-  lineinfile:
-    path: /etc/default/snapclient
-    regexp: "^SNAPCLIENT_OPTS="
-    line: "SNAPCLIENT_OPTS=\"{{ snapcast_client_daemon_options }}\""
+
+- name: Disable default config
+  become: yes
+  systemd:
+    name: snapclient
+    state: stopped
+    enabled: no
+
 - name: "Ensure the snapclient user has a shell set. If it hasn't, the client won't play audio properly. See https://github.com/badaix/snapcast/issues/229#issuecomment-328167681."
   become: true
   lineinfile:
@@ -25,3 +27,51 @@
     regexp: "^snapclient:(.*):/var/lib/snapclient:$"
     line: "snapclient:\\1:/var/lib/snapclient:/usr/sbin/nologin"
     backrefs: true
+
+- name: Create systemd unit files
+  become: true
+  tags:
+    - multi
+  with_dict: "{{ snapcast_client_daemon_options }}"
+  register: unit
+  copy:
+    dest: /lib/systemd/system/snapclient-{{ item.key }}.service
+    content: |
+      [Unit]
+      Description=Snapcast client {{ item.key }}
+      Documentation=man:snapclient(1)
+      Wants=avahi-daemon.service
+      After=network-online.target time-sync.target sound.target avahi-daemon.service
+
+      [Service]
+      EnvironmentFile=-/etc/default/snapclient-{{ item.key }}
+      ExecStart=/usr/bin/snapclient --logsink=system $SNAPCLIENT_OPTS
+      User={{ snapcast_client_user }}
+      Group=audio
+      Restart=on-failure
+
+      [Install]
+      WantedBy=multi-user.target
+
+- name: Ensure the options to the Snapclient daemon are set
+  become: true
+  tags:
+    - multi
+  with_dict: "{{ snapcast_client_daemon_options }}"
+  register: conf
+  copy:
+    dest: /etc/default/snapclient-{{ item.key }}
+    content: |
+      START_SNAPCLIENT=true
+      SNAPCLIENT_OPTS="{{ item.value }}"
+
+- name: Install/reloads system services
+  with_dict: "{{ snapcast_client_daemon_options }}"
+  tags:
+    - multi
+  become: yes
+  systemd:
+    name: snapclient-{{ item.key }}
+    state: "{{ 'restarted' if conf.changed or unit.changed else 'started' }}"
+    enabled: yes
+    daemon_reload: "{{ conf.changed or unit.changed }}"
