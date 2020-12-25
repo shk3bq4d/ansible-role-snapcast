@@ -66,7 +66,7 @@
       SNAPCLIENT_OPTS="{{ item.value }}"
 
 - name: Ensure system level volume
-  become: yes
+  become: "{{ snapcast_client_volume_cmd_sudo }}"
   when: (snapcast_client_volume_cmd or '')|length > 0
   changed_when: no
   shell:
