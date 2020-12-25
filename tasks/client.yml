@@ -65,6 +65,13 @@
       START_SNAPCLIENT=true
       SNAPCLIENT_OPTS="{{ item.value }}"
 
+- name: Ensure system level volume
+  become: yes
+  when: (snapcast_client_volume_cmd or '')|length > 0
+  changed_when: no
+  shell:
+    cmd: "{{ snapcast_client_volume_cmd }}"
+
 - name: Install/reloads system services
   with_dict: "{{ snapcast_client_daemon_options }}"
   tags:
